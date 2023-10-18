@@ -4,6 +4,14 @@ use lapin::{
 };
 use tracing::{debug, info};
 
+fn remove_trailing_slash(string: &str) -> String {
+    let mut string = string.to_string();
+    if string.ends_with("/") {
+        string.pop();
+    }
+    string
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
@@ -24,6 +32,9 @@ async fn main() -> Result<()> {
         std::env::var("TARGET_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672/".into());
     let target_exchange = std::env::var("TARGET_EXCHANGE").unwrap_or_else(|_| "hello".into());
     let target_queue = std::env::var("TARGET_QUEUE").unwrap_or_else(|_| "hello".into());
+
+    let source_addr = remove_trailing_slash(&source_addr);
+    let target_addr = remove_trailing_slash(&target_addr);
 
     let source_conn = Connection::connect(&source_addr, ConnectionProperties::default())
         .await
@@ -73,12 +84,13 @@ async fn main() -> Result<()> {
         )
         .await
         .unwrap();
-    info!("will consume");
+
+    info!("will consume queue {}", &source_queue);
 
     while let Some(delivery) = consumer.next().await {
         let delivery = delivery.expect("error in consumer");
 
-        debug!(?delivery, "received message");
+        debug!(?delivery, "received message from queue {}", &source_queue);
 
         target_channel
             .basic_publish(
@@ -93,7 +105,7 @@ async fn main() -> Result<()> {
 
         delivery.ack(BasicAckOptions::default()).await.expect("ack");
 
-        debug!(?delivery, "published message");
+        debug!(?delivery, "published message to queue {}", &target_queue);
     }
 
     Ok(())

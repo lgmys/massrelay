@@ -5,7 +5,7 @@ COPY . .
 
 RUN cargo install --path .
 
-FROM debian:buster-slim
+FROM debian:bullseye-slim
 COPY --from=builder /usr/local/cargo/bin/massrelay /usr/local/bin/massrelay
 
 CMD ["massrelay"]

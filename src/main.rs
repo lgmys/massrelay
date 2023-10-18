@@ -2,7 +2,7 @@ use futures_lite::stream::StreamExt;
 use lapin::{
     options::*, types::FieldTable, BasicProperties, Connection, ConnectionProperties, Result,
 };
-use tracing::{debug, info};
+use tracing::info;
 
 fn remove_trailing_slash(string: &str) -> String {
     let mut string = string.to_string();
@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
 
     let source_addr =
         std::env::var("SOURCE_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672/".into());
-    let source_routing_key = std::env::var("ROUTING_KEY").unwrap_or_else(|_| "hello".into());
+    let source_routing_key = std::env::var("SOURCE_ROUTING_KEY").unwrap_or_else(|_| "hello".into());
     let source_exchange = std::env::var("SOURCE_EXCHANGE").unwrap_or_else(|_| "hello".into());
     let source_queue = std::env::var("SOURCE_QUEUE").unwrap_or_else(|_| "hello".into());
 
@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
     while let Some(delivery) = consumer.next().await {
         let delivery = delivery.expect("error in consumer");
 
-        debug!(?delivery, "received message from queue {}", &source_queue);
+        info!(?delivery, "received message from queue {}", &source_queue);
 
         target_channel
             .basic_publish(
@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
 
         delivery.ack(BasicAckOptions::default()).await.expect("ack");
 
-        debug!(?delivery, "published message to queue {}", &target_queue);
+        info!(?delivery, "published message to queue {}", &target_queue);
     }
 
     Ok(())

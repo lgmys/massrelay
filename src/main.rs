@@ -22,17 +22,15 @@ async fn main() -> Result<()> {
 
     let declare = std::env::var("DECLARE").is_ok();
 
-    let source_addr =
-        std::env::var("SOURCE_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672/".into());
-    let source_routing_key = std::env::var("SOURCE_ROUTING_KEY").unwrap_or_else(|_| "hello".into());
-    let source_exchange = std::env::var("SOURCE_EXCHANGE").unwrap_or_else(|_| "hello".into());
-    let source_queue = std::env::var("SOURCE_QUEUE").unwrap_or_else(|_| "hello".into());
+    let source_addr = std::env::var("SOURCE_ADDR").unwrap();
+    let source_queue = std::env::var("SOURCE_QUEUE").unwrap();
 
-    let target_addr =
-        std::env::var("TARGET_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672/".into());
-    let target_exchange = std::env::var("TARGET_EXCHANGE").unwrap_or_else(|_| "hello".into());
-    let target_queue = std::env::var("TARGET_QUEUE").unwrap_or_else(|_| "hello".into());
+    let target_addr = std::env::var("TARGET_ADDR").unwrap();
+    let target_exchange = std::env::var("TARGET_EXCHANGE").unwrap();
+    let target_routing_key = std::env::var("TARGET_ROUTING_KEY").unwrap();
 
+    // Remove trailing slashes
+    // TODO: url some schema or library to do this / maybe regex
     let source_addr = remove_trailing_slash(&source_addr);
     let target_addr = remove_trailing_slash(&target_addr);
 
@@ -52,6 +50,9 @@ async fn main() -> Result<()> {
     let target_channel = target_conn.create_channel().await.unwrap();
 
     if declare {
+        let source_routing_key = std::env::var("SOURCE_ROUTING_KEY").unwrap();
+        let source_exchange = std::env::var("SOURCE_EXCHANGE").unwrap();
+
         let queue = source_channel
             .queue_declare(
                 &source_queue,
@@ -95,7 +96,7 @@ async fn main() -> Result<()> {
         target_channel
             .basic_publish(
                 &target_exchange,
-                &target_queue,
+                &target_routing_key,
                 BasicPublishOptions::default(),
                 &delivery.data,
                 BasicProperties::default(),
@@ -106,7 +107,7 @@ async fn main() -> Result<()> {
 
         delivery.ack(BasicAckOptions::default()).await?;
 
-        info!("published message to queue {}", &target_queue);
+        info!("published message to queue {}", &target_routing_key);
     }
 
     Ok(())

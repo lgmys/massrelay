@@ -101,10 +101,10 @@ async fn main() -> Result<()> {
                 BasicProperties::default(),
             )
             .await
-            .expect("publish")
+            .unwrap()
             .await?;
 
-        delivery.ack(BasicAckOptions::default()).await.expect("ack");
+        delivery.ack(BasicAckOptions::default()).await?;
 
         info!("published message to queue {}", &target_queue);
     }

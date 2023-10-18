@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
     while let Some(delivery) = consumer.next().await {
         let delivery = delivery.expect("error in consumer");
 
-        info!(?delivery, "received message from queue {}", &source_queue);
+        info!("received message from queue {}", &source_queue);
 
         target_channel
             .basic_publish(
@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
 
         delivery.ack(BasicAckOptions::default()).await.expect("ack");
 
-        info!(?delivery, "published message to queue {}", &target_queue);
+        info!("published message to queue {}", &target_queue);
     }
 
     Ok(())

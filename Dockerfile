@@ -5,7 +5,7 @@ COPY . .
 
 RUN cargo install --path .
 
-FROM debian:bookworm-slim
+FROM debian:bookworm
 COPY --from=builder /usr/local/cargo/bin/massrelay /usr/local/bin/massrelay
 
 CMD ["massrelay"]

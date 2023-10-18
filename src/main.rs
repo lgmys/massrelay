@@ -101,7 +101,8 @@ async fn main() -> Result<()> {
                 BasicProperties::default(),
             )
             .await
-            .expect("publish");
+            .expect("publish")
+            .await?;
 
         delivery.ack(BasicAckOptions::default()).await.expect("ack");
 

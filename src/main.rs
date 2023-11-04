@@ -1,8 +1,9 @@
 use futures_lite::stream::StreamExt;
 use lapin::{
-    options::*, types::FieldTable, BasicProperties, Connection, ConnectionProperties, Result,
+    options::*, types::FieldTable, BasicProperties, Channel, Connection, ConnectionProperties,
+    Result,
 };
-use tracing::info;
+use tracing::{error, info};
 
 fn remove_trailing_slash(string: &str) -> String {
     let mut string = string.to_string();
@@ -10,6 +11,33 @@ fn remove_trailing_slash(string: &str) -> String {
         string.pop();
     }
     string
+}
+
+async fn declare_queue_and_binding(source_channel: &Channel, source_queue: &str) {
+    let source_routing_key = std::env::var("SOURCE_ROUTING_KEY").unwrap();
+    let source_exchange = std::env::var("SOURCE_EXCHANGE").unwrap();
+
+    let queue = source_channel
+        .queue_declare(
+            &source_queue,
+            QueueDeclareOptions::default(),
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    info!(?queue, "Declared queue");
+
+    source_channel
+        .queue_bind(
+            &source_queue,
+            &source_exchange,
+            &source_routing_key,
+            QueueBindOptions::default(),
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
 }
 
 #[tokio::main]
@@ -30,7 +58,6 @@ async fn main() -> Result<()> {
     let target_routing_key = std::env::var("TARGET_ROUTING_KEY").unwrap();
 
     // Remove trailing slashes
-    // TODO: url some schema or library to do this / maybe regex
     let source_addr = remove_trailing_slash(&source_addr);
     let target_addr = remove_trailing_slash(&target_addr);
 
@@ -50,30 +77,7 @@ async fn main() -> Result<()> {
     let target_channel = target_conn.create_channel().await.unwrap();
 
     if declare {
-        let source_routing_key = std::env::var("SOURCE_ROUTING_KEY").unwrap();
-        let source_exchange = std::env::var("SOURCE_EXCHANGE").unwrap();
-
-        let queue = source_channel
-            .queue_declare(
-                &source_queue,
-                QueueDeclareOptions::default(),
-                FieldTable::default(),
-            )
-            .await
-            .unwrap();
-
-        info!(?queue, "Declared queue");
-
-        source_channel
-            .queue_bind(
-                &source_queue,
-                &source_exchange,
-                &source_routing_key,
-                QueueBindOptions::default(),
-                FieldTable::default(),
-            )
-            .await
-            .unwrap();
+        declare_queue_and_binding(&source_channel, &source_queue).await;
     }
 
     let mut consumer = source_channel
@@ -93,7 +97,7 @@ async fn main() -> Result<()> {
 
         info!("received message from queue {}", &source_queue);
 
-        target_channel
+        let publish_result = target_channel
             .basic_publish(
                 &target_exchange,
                 &target_routing_key,
@@ -101,13 +105,40 @@ async fn main() -> Result<()> {
                 &delivery.data,
                 BasicProperties::default(),
             )
-            .await
-            .unwrap()
-            .await?;
+            .await;
 
-        delivery.ack(BasicAckOptions::default()).await?;
-
-        info!("published message to queue {}", &target_routing_key);
+        match publish_result {
+            Ok(confirm) => {
+                match confirm.await {
+                    Ok(_) => match delivery.ack(BasicAckOptions::default()).await {
+                        Ok(_) => {
+                            info!("published message to routing key {}", &target_routing_key);
+                        }
+                        Err(e) => {
+                            error!("error acknowledging message");
+                            error!("error: {}", e);
+                            continue;
+                        }
+                    },
+                    Err(e) => {
+                        error!(
+                            "error publishing message to routing key {}",
+                            &target_routing_key
+                        );
+                        error!("error: {}", e);
+                        continue;
+                    }
+                };
+            }
+            Err(e) => {
+                error!(
+                    "error publishing message to routing key {}",
+                    &target_routing_key
+                );
+                error!("error: {}", e);
+                continue;
+            }
+        };
     }
 
     Ok(())
